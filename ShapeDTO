@@ -1,0 +1,34 @@
+package com.asloboda.shapeproblem.dto;
+
+import java.util.List;
+
+public class ShapeDTO {
+	
+	private Integer ptNum;
+	private List<double[]> ptList;
+
+	
+	public ShapeDTO() {
+		super();
+	}
+	
+	public ShapeDTO(int ptNum, List<double[]> ptList) {
+		super();
+		this.ptNum = ptNum;
+		this.ptList = ptList;
+	}
+	
+	public Integer getPtNum() {
+		return ptNum;
+	}
+	public void setPtNum(Integer ptNum) {
+		this.ptNum = ptNum;
+	}
+	public List<double[]> getPtList() {
+		return ptList;
+	}
+	public void setPtList(List<double[]> ptList) {
+		this.ptList = ptList;
+	}
+	
+}
