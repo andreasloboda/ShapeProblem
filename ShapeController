@@ -1,0 +1,213 @@
+package com.asloboda.shapeproblem.controllers;
+
+import java.util.ArrayList;
+import java.util.List;
+
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+
+import com.asloboda.shapeproblem.dto.ShapeDTO;
+
+@RestController
+@RequestMapping("/shape")
+public class ShapeController {
+
+	// First part of the controller is for various helper functions. If the program
+	// was more complex, these would form shapeEntity class;
+
+	List<double[]> shape = new ArrayList<>();
+
+	private List<double[]> getShape() {
+		return shape;
+	}
+
+	private void setShape(List<double[]> sh) {
+		shape = sh;
+	}
+
+	///////////////////////////////////////////////////////
+	// Second part, which would probably be part of a service package if the program was
+	// more complex, and then autowired from here through an interface
+
+	private double[][] shapeListToArray(List<double[]> sh) {
+		double[][] points = new double[sh.size()][2];
+		int i = 0;
+		for (double[] pt : sh) {
+			points[i] = pt;
+			i++;
+		}
+		return points;
+	}
+
+	private boolean[] checkQuads(double[] pt, double[][] pts) {
+		// this function divides area into four quadrants, formed by drawing x and y
+		// axis with pt as their meeting spot
+		boolean[] quads = new boolean[] { false, false, false, false };
+		for (int j = 0; j < pts.length; j++) {
+			if (pt[0] != pts[j][0] || pt[1] != pts[j][1]) {
+				if (pt[0] >= pts[j][0]) {
+					if (pt[1] <= pts[j][1]) {
+						quads[0] = true; // north-east quad
+					}
+					if (pt[1] >= pts[j][1])
+						quads[3] = true; // south-east quad
+				}
+				if (pt[0] <= pts[j][0]) {
+					if (pt[1] <= pts[j][1])
+						quads[1] = true; // north-west quad
+					if (pt[1] >= pts[j][1])
+						quads[2] = true; // south-west quad
+				}
+			}
+		}
+		return quads;
+	}
+
+	private boolean isConvex(List<double[]> sh) {
+		// if less than 3 points have been entered, it's not considered a shape
+		if (sh.size() < 3)
+			return false;
+		// else, we inspect if the shape is convex
+		// the idea is to divide area in four quadrants, and see if any of the points
+		// has all four quadrants occupied
+		// the down-side is that this program doesn't check for cases where three points
+		// are all on same edge
+		boolean con = true;
+		double[][] pts = shapeListToArray(sh);
+		for (int i = 0; i < pts.length; i++) {
+			boolean[] quads = checkQuads(pts[i], pts);
+			if (quads[0] && quads[1] && quads[2] && quads[3]) {
+				con = false;
+				break;
+			}
+		}
+		return con;
+	}
+
+	private void formEdges(List<double[]> sh, List<double[]> n, List<double[]> s, List<double[]> e, List<double[]> w) {
+		// this function relies on checkQuads and sorts points by the edge they help
+		// form. Each point can belong to up to three edges. reason for separating
+		// formEdges and isConvex is purely about functionality
+		double[][] pts = shapeListToArray(sh);
+		for (int i = 0; i < pts.length; i++) {
+			boolean[] quads = checkQuads(pts[i], pts);
+			if (!quads[0] || !quads[1])
+				n.add(new double[] { pts[i][0], pts[i][1] });
+			if (!quads[1] || !quads[2])
+				w.add(new double[] { pts[i][0], pts[i][1] });
+			if (!quads[2] || !quads[3])
+				s.add(new double[] { pts[i][0], pts[i][1] });
+			if (!quads[3] || !quads[0])
+				e.add(new double[] { pts[i][0], pts[i][1] });
+		}
+	}
+
+	private double findX(double[] one, double[] two, double x, boolean axis) {
+    // value of 'axis' determines which coordinates to use in calculation
+		// axis: true => w or e edge, false => n or s edge
+		double a1, b1, a2, b2;
+		double y;
+		a1 = two[0] - one[0];
+		b1 = two[1] - one[1];
+		if (axis) {
+			if (b1 == 0)
+				y = two[0];
+			else {
+				b2 = x - one[1];
+				a2 = a1 * b2 / b1;
+				y = a2 + one[0];
+			}
+		} else {
+			if (a1 == 0)
+				y = two[1];
+			else {
+				a2 = x - one[0];
+				b2 = a2 * b1 / a1;
+				y = b2 + one[1];
+			}
+		}
+		return y;
+	}
+
+	private boolean compareToBorder(List<double[]> edge, char side, double[] pt) {
+		double[] lower = edge.get(0);
+		double[] higher = edge.get(0);
+		int dir = 0;
+		boolean axis = false;
+		if (side == 'e' || side == 'w') {
+			dir = 1;
+			axis = true;
+		}
+		for (double[] x : edge) {
+			if (x[dir] <= pt[dir]) {
+				if (lower[dir] > pt[dir])
+					lower = x;
+				else if (x[dir] > lower[dir])
+					lower = x;
+			}
+			if (x[dir] >= pt[dir]) {
+				if (higher[dir] < pt[dir])
+					higher = x;
+				else if (x[dir] < higher[dir])
+					higher = x;
+			}
+		}
+
+		double x = findX(lower, higher, pt[dir], axis);
+		if (side == 'n' || side == 'w')
+			axis = true;
+		else
+			axis = false;
+
+		if ((axis && pt[dir] > x) || (!axis && pt[dir] < x))
+			return false;
+
+		return true;
+	}
+
+	///////////////////////////////////////////////////////
+	// Third part of the program for REST points.
+
+	@GetMapping("/getShape")
+	public ResponseEntity<?> getCurrentShape() {
+		List<double[]> sh = getShape();
+		ShapeDTO resp = new ShapeDTO(sh.size(), sh);
+		return new ResponseEntity<>(resp, HttpStatus.OK);
+	}
+
+	@GetMapping("/checkPoint")
+	public ResponseEntity<?> checkPoint(@RequestParam double x, @RequestParam double y) {
+		List<double[]> sh = getShape();
+		String msg;
+
+		double[] point = new double[] { x, y };
+		List<double[]> n = new ArrayList<>();
+		List<double[]> s = new ArrayList<>();
+		List<double[]> e = new ArrayList<>();
+		List<double[]> w = new ArrayList<>();
+		formEdges(sh, n, s, e, w);
+		if (compareToBorder(n, 'n', point) && compareToBorder(s, 's', point) && compareToBorder(w, 'w', point)
+				&& compareToBorder(e, 'e', point))
+			msg = "Point is within the shape";
+		else
+			msg = "Point is outside the shape";
+		return new ResponseEntity<>(msg, HttpStatus.OK);
+	}
+
+	@PostMapping("/formShape")
+	public ResponseEntity<?> formShape(@RequestBody ShapeDTO sh) {
+		if (sh.getPtNum() != sh.getPtList().size())
+			return new ResponseEntity<>("Wrong number of points listed", HttpStatus.BAD_REQUEST);
+		if (!isConvex(sh.getPtList()))
+			return new ResponseEntity<>("Shape is not convex", HttpStatus.BAD_REQUEST);
+		setShape(sh.getPtList());
+		return new ResponseEntity<>("New shape accepted!", HttpStatus.OK);
+	}
+
+}
